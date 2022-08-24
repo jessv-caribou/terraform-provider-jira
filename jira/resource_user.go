@@ -2,10 +2,27 @@ package jira
 
 import (
 	"fmt"
+
 	jira "github.com/andygrunwald/go-jira"
 	"github.com/hashicorp/terraform-plugin-sdk/helper/schema"
 	"github.com/pkg/errors"
 )
+
+type userSearchRequest struct {
+	query string `json:"query,omitempty" structs:"query,omitempty"`
+}
+
+type jiraCloudUser struct {
+	Self         string          `json:"self,omitempty" structs:"self,omitempty"`
+	AccountID    string          `json:"accountId,omitempty" structs:"accountId,omitempty"`
+	AccountType  string          `json:"accountType,omitempty" structs:"accountType,omitempty"`
+	EmailAddress string          `json:"emailAddress,omitempty" structs:"emailAddress,omitempty"`
+	AvatarUrls   jira.AvatarUrls `json:"avatarUrls,omitempty" structs:"avatarUrls,omitempty"`
+	DisplayName  string          `json:"displayName,omitempty" structs:"displayName,omitempty"`
+	Active       bool            `json:"active,omitempty" structs:"active,omitempty"`
+	TimeZone     string          `json:"timeZone,omitempty" structs:"timeZone,omitempty"`
+	Locale       string          `json:"locale,omitempty" structs:"locale,omitempty"`
+}
 
 func usernameFallbackSuppressFunc(k, old, new string, d *schema.ResourceData) bool {
 	if new == "" {
@@ -44,6 +61,26 @@ func resourceUser() *schema.Resource {
 	}
 }
 
+func dataUser() *schema.Resource {
+	return &schema.Resource{
+		Read: dataUserRead,
+		Schema: map[string]*schema.Schema{
+			"account_id": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+			"email": &schema.Schema{
+				Type:     schema.TypeString,
+				Required: true,
+			},
+			"display_name": &schema.Schema{
+				Type:     schema.TypeString,
+				Computed: true,
+			},
+		},
+	}
+}
+
 func getUserByKey(client *jira.Client, key string) (*jira.User, *jira.Response, error) {
 	apiEndpoint := fmt.Sprintf("%s?key=%s", userAPIEndpoint, key)
 	req, err := client.NewRequest("GET", apiEndpoint, nil)
@@ -57,6 +94,26 @@ func getUserByKey(client *jira.Client, key string) (*jira.User, *jira.Response, 
 		return nil, resp, jira.NewJiraError(resp, err)
 	}
 	return user, resp, nil
+}
+
+func getUserByUsername(client *jira.Client, email string) (*jiraCloudUser, *jira.Response, error) {
+	apiEndpoint := "rest/api/3/user/search?query=" + email
+	fmt.Println("API Endpoint: " + apiEndpoint)
+	req, err := client.NewRequest("GET", apiEndpoint, nil)
+	if err != nil {
+		return nil, nil, err
+	}
+
+	users := new([]jiraCloudUser)
+
+	resp, err := client.Do(req, users)
+
+	user := (*users)[0]
+
+	if err != nil {
+		return nil, resp, jira.NewJiraError(resp, err)
+	}
+	return &user, resp, nil
 }
 
 func deleteUserByKey(client *jira.Client, key string) (*jira.Response, error) {
@@ -97,6 +154,20 @@ func resourceUserCreate(d *schema.ResourceData, m interface{}) error {
 	d.SetId(createdUser.Key)
 
 	return resourceUserRead(d, m)
+}
+
+func dataUserRead(d *schema.ResourceData, m interface{}) error {
+	config := m.(*Config)
+
+	user, _, err := getUserByUsername(config.jiraClient, d.Get("email").(string))
+	if err != nil {
+		return errors.Wrap(err, "getting jira user failed")
+	}
+	d.SetId(user.AccountID)
+	d.Set("email", user.EmailAddress)
+	d.Set("account_id", user.AccountID)
+	d.Set("display_name", user.DisplayName)
+	return nil
 }
 
 // resourceUserRead reads issue details using jira api
