@@ -15,6 +15,10 @@ type Group struct {
 	Name string `json:"name,omitempty" structs:"name,omitempty"`
 }
 
+type GroupMembership struct {
+	AccountID string `json:"accountId,omitempty" structs:"accountId,omitempty"`
+}
+
 // Groups List of groups the user belongs to
 type Groups struct {
 	Items []Group `json:"items,omitempty" structs:"items,omitempty"`
@@ -25,11 +29,11 @@ type UserGroups struct {
 	Groups Groups `json:"groups,omitempty" structs:"groups,omitempty"`
 }
 
-func getGroups(jiraClient *jira.Client, username string) (*UserGroups, *jira.Response, error) {
+func getGroups(jiraClient *jira.Client, accountId string) (*UserGroups, *jira.Response, error) {
 
 	relativeURL, _ := url.Parse("/rest/api/2/user")
 	query := relativeURL.Query()
-	query.Set("username", username)
+	query.Set("accountId", accountId)
 	query.Set("expand", "groups")
 
 	relativeURL.RawQuery = query.Encode()
@@ -57,7 +61,7 @@ func resourceGroupMembership() *schema.Resource {
 			State: schema.ImportStatePassthrough,
 		},
 		Schema: map[string]*schema.Schema{
-			"username": &schema.Schema{
+			"account_id": &schema.Schema{
 				Type:     schema.TypeString,
 				Required: true,
 				ForceNew: true,
@@ -75,11 +79,11 @@ func resourceGroupMembership() *schema.Resource {
 func resourceGroupMembershipCreate(d *schema.ResourceData, m interface{}) error {
 	config := m.(*Config)
 
-	username := d.Get("username").(string)
+	accountId := d.Get("account_id").(string)
 	group := d.Get("group").(string)
 
-	groupMembership := new(Group)
-	groupMembership.Name = username
+	groupMembership := new(GroupMembership)
+	groupMembership.AccountID = accountId
 
 	relativeURL, _ := url.Parse(groupUserAPIEndpoint)
 	query := relativeURL.Query()
@@ -91,7 +95,7 @@ func resourceGroupMembershipCreate(d *schema.ResourceData, m interface{}) error 
 		return errors.Wrap(err, "Request failed")
 	}
 
-	d.SetId(fmt.Sprintf("%s:%s", username, group))
+	d.SetId(fmt.Sprintf("%s:%s", accountId, group))
 
 	return resourceGroupMembershipRead(d, m)
 }
@@ -101,15 +105,15 @@ func resourceGroupMembershipRead(d *schema.ResourceData, m interface{}) error {
 	config := m.(*Config)
 
 	components := strings.SplitN(d.Id(), ":", 2)
-	username := components[0]
+	accountId := components[0]
 	groupname := components[1]
 
-	groups, _, err := getGroups(config.jiraClient, username)
+	groups, _, err := getGroups(config.jiraClient, accountId)
 	if err != nil {
 		return errors.Wrap(err, "getting jira group failed")
 	}
 
-	d.Set("username", username)
+	d.Set("account_id", accountId)
 	d.Set("group", groupname)
 
 	for _, group := range groups.Groups.Items {
@@ -128,7 +132,7 @@ func resourceGroupMembershipDelete(d *schema.ResourceData, m interface{}) error 
 	relativeURL, _ := url.Parse(groupUserAPIEndpoint)
 
 	query := relativeURL.Query()
-	query.Set("username", d.Get("username").(string))
+	query.Set("accountId", d.Get("account_id").(string))
 	query.Set("groupname", d.Get("group").(string))
 
 	relativeURL.RawQuery = query.Encode()
