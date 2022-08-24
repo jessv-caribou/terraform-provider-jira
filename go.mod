@@ -1,4 +1,4 @@
-module github.com/jessv-caribou/terraform-provider-jiracloud
+module github.com/jessv-caribou/terraform-provider-jira
 
 go 1.19
 
