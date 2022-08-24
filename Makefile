@@ -26,6 +26,9 @@ deps: ## Download dependencies
 build: ## Build
 	go build .
 
+install:
+	cp ./terraform-provider-jira /Users/jess.verner/.terraform.d/plugins/terraform.example.com/local/jira/1.0.0/darwin_arm64
+
 release: ## Build the go binaries for various platform
 	./scripts/release.sh
 
