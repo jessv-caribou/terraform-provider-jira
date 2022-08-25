@@ -108,7 +108,21 @@ func getUserByUsername(client *jira.Client, email string) (*jiraCloudUser, *jira
 
 	resp, err := client.Do(req, users)
 
-	user := (*users)[0]
+	var userIndex int = -1
+
+	for i, user := range *users {
+		if user.AccountType == "atlassian" {
+			userIndex = i
+			break
+		}
+	}
+
+	if userIndex < 0 {
+		err := errors.New("jiraClient: User does not exist")
+		return nil, resp, err
+	}
+
+	user := (*users)[userIndex]
 
 	if err != nil {
 		return nil, resp, jira.NewJiraError(resp, err)
