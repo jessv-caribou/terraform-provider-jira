@@ -24,6 +24,12 @@ type Groups struct {
 	Items []Group `json:"items,omitempty" structs:"items,omitempty"`
 }
 
+type JiraCloudGroup struct {
+	Name    string `json:"name,omitempty" structs:"name,omitempty"`
+	GroupId string `json:"groupId,omitempty" structs:"groupId,omitempty"`
+	Self    string `json:"self,omitempty" structs:"self,omitempty"`
+}
+
 // UserGroups Wrapper for the groups of a user
 type UserGroups struct {
 	Groups Groups `json:"groups,omitempty" structs:"groups,omitempty"`
@@ -82,6 +88,16 @@ func resourceGroupMembershipCreate(d *schema.ResourceData, m interface{}) error 
 	accountId := d.Get("account_id").(string)
 	group := d.Get("group").(string)
 
+	isMember, _, err := isGroupMember(config.jiraClient, accountId, group)
+	if err != nil {
+		return errors.Wrap(err, "Request failed")
+	}
+
+	if isMember {
+		d.SetId(fmt.Sprintf("%s:%s", accountId, group))
+		return resourceGroupMembershipRead(d, m)
+	}
+
 	groupMembership := new(GroupMembership)
 	groupMembership.AccountID = accountId
 
@@ -90,7 +106,7 @@ func resourceGroupMembershipCreate(d *schema.ResourceData, m interface{}) error 
 	query.Set("groupname", group)
 	relativeURL.RawQuery = query.Encode()
 
-	err := request(config.jiraClient, "POST", relativeURL.String(), groupMembership, nil)
+	err = request(config.jiraClient, "POST", relativeURL.String(), groupMembership, nil)
 	if err != nil {
 		return errors.Wrap(err, "Request failed")
 	}
@@ -143,4 +159,21 @@ func resourceGroupMembershipDelete(d *schema.ResourceData, m interface{}) error 
 	}
 
 	return nil
+}
+
+func isGroupMember(client *jira.Client, id string, targetGroup string) (bool, *jira.Response, error) {
+	apiEndpoint := "rest/api/3/user/groups?accountId=" + id
+	req, err := client.NewRequest("GET", apiEndpoint, nil)
+	if err != nil {
+		return false, nil, err
+	}
+
+	groups := new([]JiraCloudGroup)
+
+	resp, err := client.Do(req, groups)
+	if err != nil {
+		return false, nil, err
+	}
+
+	return false, resp, nil
 }
