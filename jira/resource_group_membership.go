@@ -86,6 +86,7 @@ func resourceGroupMembershipCreate(d *schema.ResourceData, m interface{}) error 
 	config := m.(*Config)
 
 	accountId := d.Get("account_id").(string)
+	clean_id := strings.ReplaceAll(accountId, ":", "_")
 	group := d.Get("group").(string)
 
 	isMember, _, err := isGroupMember(config.jiraClient, accountId, group)
@@ -94,7 +95,7 @@ func resourceGroupMembershipCreate(d *schema.ResourceData, m interface{}) error 
 	}
 
 	if isMember {
-		d.SetId(fmt.Sprintf("%s:%s", accountId, group))
+		d.SetId(fmt.Sprintf("%s:%s", clean_id, group))
 		return resourceGroupMembershipRead(d, m)
 	}
 
@@ -111,7 +112,7 @@ func resourceGroupMembershipCreate(d *schema.ResourceData, m interface{}) error 
 		return errors.Wrap(err, "Request failed")
 	}
 
-	d.SetId(fmt.Sprintf("%s:%s", accountId, group))
+	d.SetId(fmt.Sprintf("%s:%s", clean_id, group))
 
 	return resourceGroupMembershipRead(d, m)
 }
@@ -121,7 +122,7 @@ func resourceGroupMembershipRead(d *schema.ResourceData, m interface{}) error {
 	config := m.(*Config)
 
 	components := strings.SplitN(d.Id(), ":", 2)
-	accountId := components[0]
+	accountId := strings.ReplaceAll(components[0], "_", ":")
 	groupname := components[1]
 
 	groups, _, err := getGroups(config.jiraClient, accountId)
@@ -173,6 +174,12 @@ func isGroupMember(client *jira.Client, id string, targetGroup string) (bool, *j
 	resp, err := client.Do(req, groups)
 	if err != nil {
 		return false, nil, err
+	}
+
+	for _, group := range *groups {
+		if group.Name == targetGroup {
+			return true, resp, nil
+		}
 	}
 
 	return false, resp, nil
